@@ -1,0 +1,9 @@
+# Enable or disable autonomous driving at the decision-making boundary.
+bool enable
+---
+# The request was understood and applied.
+bool success
+# The resulting autonomy state, returned so the caller can confirm it.
+bool enabled
+# Human-readable result for command-line tools and diagnostics.
+string message

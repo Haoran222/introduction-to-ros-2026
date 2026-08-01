@@ -75,11 +75,12 @@ the corridor boundary while retaining passenger-car bodies.
 
 ### `decision_state_machine_node`
 
-Six states, highest-severity wins each tick (10 Hz timer over the latest cached
+Seven states, highest-severity wins each tick (10 Hz timer over the latest cached
 signals):
 
 | State            | Trigger                                                                 | Trajectory velocity  |
 |-------------------|-------------------------------------------------------------------------|-----------------------|
+| `AUTONOMY_DISABLED` | `/decision_making/set_autonomy_enabled` is called with `enable: false` | x 0 |
 | `SENSOR_FAULT`    | hazard or planning trajectory has timed out                              | x 0 |
 | `EMERGENCY_STOP`  | hazard within `emergency_distance`, or closing with time-to-collision < `emergency_ttc` | x 0 |
 | `TRAFFIC_STOP`    | perception's `/traffic_light/must_stop` is true                        | x 0                   |
@@ -87,7 +88,10 @@ signals):
 | `CAUTION`         | hazard within `caution_distance`                                        | x `clamp(distance / caution_distance, caution_min_speed_factor, 1.0)` |
 | `DRIVE`           | none of the above                                                        | x 1 (unchanged)       |
 
-`EMERGENCY_STOP` outranks `TRAFFIC_STOP`: a collision is worse than an
+`AUTONOMY_DISABLED` is an explicit operator command and remains active until a
+second service request enables autonomy. Its entry bypasses normal state
+hysteresis so a stop request is applied immediately. `EMERGENCY_STOP` outranks
+`TRAFFIC_STOP`: a collision is worse than an
 illegal-but-controlled stop past a light. Verified by manual injection (see
 "Testing" below): both states individually zero the trajectory correctly, and
 triggering both signals at once resolves to `EMERGENCY_STOP` as intended.
@@ -127,8 +131,12 @@ Publishes:
   `control`'s `trajectory_follower_node` instead of `/planning/trajectory`
   directly.
 - `/decision_making/state` (`std_msgs/String`) — `"DRIVE"` / `"TRAFFIC_STOP"` /
-  `"CAUTION"` / `"EMERGENCY_STOP"` / `"AVOIDING"` / `"SENSOR_FAULT"`, for
-  debugging/RViz/the presentation demo.
+  `"CAUTION"` / `"EMERGENCY_STOP"` / `"AVOIDING"` / `"SENSOR_FAULT"` /
+  `"AUTONOMY_DISABLED"`, for debugging/RViz/the presentation demo.
+
+Provides `/decision_making/set_autonomy_enabled`
+(`decision_making/srv/SetAutonomyEnabled`) so an operator can request a safe
+stop or resume autonomous decision-making without restarting any nodes.
 
 Parameters: `must_stop_topic` (default `/traffic_light/must_stop`), `hazard_topic`
 (default `/decision_making/hazard_status`), `trajectory_topic` (default
@@ -148,14 +156,85 @@ controller is expected to track `(pose, velocity)` per point rather than replay
 against wall-clock time; revisit if the control module ends up needing accurate
 timing under sustained gating.
 
-## Custom message: `decision_making/msg/HazardStatus`
+## Custom ROS interfaces
+
+Both interfaces below were designed for this project and are generated with
+`rosidl_generate_interfaces` in `decision_making/CMakeLists.txt`.
+
+### Message: `decision_making/msg/HazardStatus`
+
+`HazardStatus.msg` carries the result of forward-obstacle analysis between two
+independent nodes. `forward_obstacle_monitor_node` publishes it on
+`/decision_making/hazard_status`; `decision_state_machine_node` subscribes to it
+and selects `DRIVE`, `CAUTION`, `AVOIDING`, or `EMERGENCY_STOP` behavior. A topic
+is appropriate here because obstacle state is continuous sensor-derived data
+that is updated repeatedly rather than a one-time request.
 
 ```
 std_msgs/Header header
 float32 distance         # meters to nearest obstacle ahead; large sentinel if none
 float32 closing_speed    # m/s, positive = obstacle getting closer
 bool detected
+float32 lateral_offset   # signed obstacle position relative to the planned path
+bool avoid_clear         # whether the selected adjacent corridor is clear
 ```
+
+- `header` timestamps the observation and identifies its coordinate frame.
+- `distance` and `closing_speed` allow the state machine to calculate proximity
+  and time-to-collision.
+- `detected` distinguishes a real observation from the no-obstacle sentinel.
+- `lateral_offset` identifies which side of the path the obstacle occupies.
+- `avoid_clear` reports whether the monitor found enough free space for the
+  state machine to generate a shifted avoidance trajectory.
+
+Inspect the generated definition and live messages with:
+
+```bash
+ros2 interface show decision_making/msg/HazardStatus
+ros2 topic echo /decision_making/hazard_status
+```
+
+### Service: `decision_making/srv/SetAutonomyEnabled`
+
+`SetAutonomyEnabled.srv` implements a request/response operation for explicitly
+stopping or resuming autonomous driving:
+
+```text
+bool enable
+---
+bool success
+bool enabled
+string message
+```
+
+The request contains the desired autonomy state. The response confirms that the
+request was applied, returns the resulting state, and includes a readable status
+message. `decision_state_machine_node` is the service server. When it receives
+`enable: false`, it immediately enters `AUTONOMY_DISABLED` and publishes a
+trajectory whose velocities are all zero; the downstream control node therefore
+commands a full stop. When it receives `enable: true`, normal traffic-light,
+hazard, and sensor-freshness decisions resume. Repeating the same request is
+valid and produces an "already enabled/disabled" response.
+
+A service is appropriate for this operation because enable/disable is an
+occasional command whose caller needs explicit confirmation, not a continuous
+data stream. The ROS 2 command-line tool can act as the client:
+
+```bash
+ros2 interface show decision_making/srv/SetAutonomyEnabled
+
+# Request a safe stop.
+ros2 service call /decision_making/set_autonomy_enabled \
+  decision_making/srv/SetAutonomyEnabled "{enable: false}"
+
+# Resume autonomous driving.
+ros2 service call /decision_making/set_autonomy_enabled \
+  decision_making/srv/SetAutonomyEnabled "{enable: true}"
+```
+
+While testing, `/decision_making/state` should report `AUTONOMY_DISABLED` after
+the first call and return to the state selected from live inputs after the
+second call.
 
 ## Known limitations
 
@@ -202,9 +281,17 @@ Inspect results:
 ros2 topic echo /decision_making/hazard_status
 ros2 topic echo /decision_making/state
 ros2 topic echo /decision_making/trajectory
+ros2 service type /decision_making/set_autonomy_enabled
 ```
 
 ## Testing
+
+The custom service was tested against a running `decision_state_machine_node`.
+Calling it with `enable: false` returned `success=true`, `enabled=false`, and
+changed `/decision_making/state` to `AUTONOMY_DISABLED`. Calling it with
+`enable: true` returned `success=true`, `enabled=true`; with no live sensor data
+in the isolated test, the node then correctly returned to the fail-safe
+`SENSOR_FAULT` state.
 
 No live NPC events were available while this was built (`eventEnable` was
 temporarily `[false, false]` for waypoint recording — see `planning/README.md`).
