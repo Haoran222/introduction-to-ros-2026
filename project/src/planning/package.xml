@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>planning</name>
+  <version>0.1.0</version>
+  <description>
+    Planning stack for the Autonomous Driving project: short-term goal selection over
+    a recorded waypoint list, and a curvature/acceleration-constrained trajectory
+    planner that turns the upcoming waypoints into a feasible local trajectory.
+  </description>
+  <maintainer email="haoranwang0222@gmail.com">Haoran Wang</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>yaml_cpp_vendor</depend>
+
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <exec_depend>simulation</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

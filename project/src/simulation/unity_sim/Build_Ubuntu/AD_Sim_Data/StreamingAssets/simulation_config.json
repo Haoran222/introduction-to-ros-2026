@@ -1,0 +1,39 @@
+{
+    "spawnIndexData": {
+        "spawnIndex": 0
+    },
+    "eventEnable": [
+        true,
+        true
+    ],
+    "controlConfig": {
+        "address": "127.0.0.1",
+        "port": 6657,
+        "controllerOnly": false,
+        "controllerOverride": true
+    },
+    "sensorConfig": {
+        "address": "127.0.0.1",
+        "port": 9998,
+        "RGBCamera": {
+            "enabled": true,
+            "height": 480,
+            "width": 640,
+            "fov": 90.0
+        },
+        "segCamera": {
+            "enabled": true,
+            "height": 240,
+            "width": 320,
+            "fov": 90.0
+        },
+        "depthCamera": {
+            "enabled": true,
+            "height": 480,
+            "width": 640,
+            "fov": 90.0
+        },
+        "groundRemoval": true,
+        "truePose": true
+    }
+}

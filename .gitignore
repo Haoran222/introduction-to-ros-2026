@@ -1,0 +1,17 @@
+# ROS 2 build output
+build/
+install/
+log/
+project/build/
+project/install/
+project/log/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Editor and operating-system files
+.vscode/
+.idea/
+*:Zone.Identifier
+*~

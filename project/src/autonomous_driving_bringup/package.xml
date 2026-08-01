@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>autonomous_driving_bringup</name>
+  <version>0.1.0</version>
+  <description>Single-launch bringup for the complete autonomous-driving stack and Unity simulator.</description>
+  <maintainer email="haoranwang0222@gmail.com">Haoran Wang</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>simulation</exec_depend>
+  <exec_depend>perception</exec_depend>
+  <exec_depend>planning</exec_depend>
+  <exec_depend>decision_making</exec_depend>
+  <exec_depend>control</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

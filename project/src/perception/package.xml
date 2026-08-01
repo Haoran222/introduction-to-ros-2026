@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>perception</name>
+  <version>0.1.0</version>
+  <description>
+    Perception stack for the Autonomous Driving project: sensor coordinate frames,
+    depth-to-pointcloud/occupancy-map pipeline, and camera-based traffic light recognition.
+  </description>
+  <maintainer email="haoranwang0222@gmail.com">Haoran Wang</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
+  <depend>message_filters</depend>
+  <depend>OpenCV</depend>
+
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <exec_depend>simulation</exec_depend>
+  <exec_depend>octomap_server</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
