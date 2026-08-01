@@ -1,5 +1,5 @@
 # Nearest forward obstacle in the ego lane corridor, as seen in perception's
-# accumulated occupancy map. Published by forward_obstacle_monitor_node, consumed
+# current depth-camera point cloud. Published by forward_obstacle_monitor_node, consumed
 # by decision_state_machine_node to drive the CAUTION / EMERGENCY_STOP states
 # (handout's Optional Events I/II: vehicle merging, emergency brake).
 

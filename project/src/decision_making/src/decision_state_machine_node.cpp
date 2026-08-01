@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -12,11 +13,13 @@
 #include <std_msgs/msg/string.hpp>
 
 #include <decision_making/msg/hazard_status.hpp>
+#include <decision_making/srv/set_autonomy_enabled.hpp>
 #include <planning/msg/trajectory.hpp>
 
 namespace {
 
 enum class State {
+  kAutonomyDisabled,
   kDrive,
   kTrafficStop,
   kCaution,
@@ -27,6 +30,8 @@ enum class State {
 
 const char *StateName(State s) {
   switch (s) {
+    case State::kAutonomyDisabled:
+      return "AUTONOMY_DISABLED";
     case State::kDrive:
       return "DRIVE";
     case State::kTrafficStop:
@@ -132,6 +137,14 @@ public:
           last_trajectory_time_ = now();
         });
 
+    autonomy_service_ = create_service<decision_making::srv::SetAutonomyEnabled>(
+        "/decision_making/set_autonomy_enabled",
+        std::bind(
+            &DecisionStateMachineNode::SetAutonomyEnabled,
+            this,
+            std::placeholders::_1,
+            std::placeholders::_2));
+
     const double rate_hz = get_parameter("decision_rate_hz").as_double();
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / std::max(1.0, rate_hz)),
                                 std::bind(&DecisionStateMachineNode::Tick, this));
@@ -140,6 +153,7 @@ public:
 private:
   // Evaluate inputs, commit one state, and publish a gated trajectory.
   void Tick() {
+    bool autonomy_enabled;
     bool must_stop;
     decision_making::msg::HazardStatus::ConstSharedPtr hazard;
     planning::msg::Trajectory::ConstSharedPtr trajectory;
@@ -147,6 +161,7 @@ private:
     rclcpp::Time last_trajectory_time;
     {
       std::lock_guard<std::mutex> lock(mutex_);
+      autonomy_enabled = autonomy_enabled_;
       must_stop = must_stop_;
       hazard = latest_hazard_;
       trajectory = latest_trajectory_;
@@ -172,7 +187,9 @@ private:
     UpdateHazardContinuity(hazard);
 
     const State candidate =
-        sensor_fault ? State::kSensorFault : DecideState(must_stop, hazard);
+        !autonomy_enabled
+            ? State::kAutonomyDisabled
+            : (sensor_fault ? State::kSensorFault : DecideState(must_stop, hazard));
     const State previous_state = committed_state_;
     const State state = ApplyHysteresis(candidate);
 
@@ -214,6 +231,29 @@ private:
     }
 
     trajectory_pub_->publish(gated);
+  }
+
+  // Handle an operator request to stop or resume autonomous driving. Disabling
+  // takes effect on the next state-machine tick and is treated as an immediate,
+  // fail-safe transition by ApplyHysteresis().
+  void SetAutonomyEnabled(
+      const std::shared_ptr<decision_making::srv::SetAutonomyEnabled::Request> request,
+      std::shared_ptr<decision_making::srv::SetAutonomyEnabled::Response> response) {
+    bool changed;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      changed = autonomy_enabled_ != request->enable;
+      autonomy_enabled_ = request->enable;
+      response->enabled = autonomy_enabled_;
+    }
+
+    response->success = true;
+    response->message = changed
+                            ? (response->enabled ? "Autonomous driving enabled"
+                                                 : "Autonomous driving disabled; safe stop requested")
+                            : (response->enabled ? "Autonomous driving was already enabled"
+                                                 : "Autonomous driving was already disabled");
+    RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
   }
 
   // Track continuous detection before treating an obstacle as stationary.
@@ -297,12 +337,14 @@ private:
     }
   }
 
-  // Delay normal transitions, but enter emergency and sensor-fault states now.
+  // Delay normal transitions, but enter disabled, emergency, and fault states now.
   // Keep emergency braking active for a minimum dwell time.
   State ApplyHysteresis(State candidate) {
     const rclcpp::Time t = now();
 
-    if (candidate == State::kEmergencyStop || candidate == State::kSensorFault) {
+    if (candidate == State::kAutonomyDisabled ||
+        candidate == State::kEmergencyStop ||
+        candidate == State::kSensorFault) {
       if (candidate == State::kEmergencyStop &&
           committed_state_ != State::kEmergencyStop) {
         emergency_entered_at_ = t;
@@ -392,6 +434,8 @@ private:
       State state,
       const decision_making::msg::HazardStatus::ConstSharedPtr &hazard) const {
     switch (state) {
+      case State::kAutonomyDisabled:
+        return 0.0;
       case State::kDrive:
         return 1.0;
       case State::kTrafficStop:
@@ -445,6 +489,7 @@ private:
 
   // Latest inputs and receive times.
   std::mutex mutex_;
+  bool autonomy_enabled_{true};
   bool must_stop_{false};
   decision_making::msg::HazardStatus::ConstSharedPtr latest_hazard_;
   planning::msg::Trajectory::ConstSharedPtr latest_trajectory_;
@@ -457,6 +502,7 @@ private:
   rclcpp::Subscription<planning::msg::Trajectory>::SharedPtr trajectory_sub_;
   rclcpp::Publisher<planning::msg::Trajectory>::SharedPtr trajectory_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr state_pub_;
+  rclcpp::Service<decision_making::srv::SetAutonomyEnabled>::SharedPtr autonomy_service_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

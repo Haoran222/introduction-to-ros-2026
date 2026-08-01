@@ -108,7 +108,8 @@ introduction-to-ros-2026/
     │   │   └── msg/               # Trajectory messages
     │   ├── decision_making/
     │   │   ├── src/               # Hazard monitor and state machine
-    │   │   └── msg/               # HazardStatus message
+    │   │   ├── msg/               # HazardStatus message
+    │   │   └── srv/               # SetAutonomyEnabled service
     │   ├── control/
     │   │   └── src/               # Pure Pursuit and speed controller
     │   └── dummy_controller/       # Standalone example controller
@@ -232,12 +233,16 @@ The state machine contains the following states:
 
 | State | Behavior |
 | --- | --- |
+| `AUTONOMY_DISABLED` | Operator-requested safe stop; set all trajectory velocities to zero |
 | `DRIVE` | Preserve the planned trajectory |
 | `CAUTION` | Reduce speed according to obstacle distance |
 | `TRAFFIC_STOP` | Set all trajectory velocities to zero |
 | `EMERGENCY_STOP` | Immediately set all velocities to zero |
 | `AVOIDING` | Reduce speed and shift the local trajectory laterally |
 | `SENSOR_FAULT` | Apply a fail-safe stop when required inputs are stale |
+
+It also provides `/decision_making/set_autonomy_enabled`, a custom service that
+stops or resumes autonomy and returns confirmation to the caller.
 
 ### `control`
 
@@ -279,6 +284,64 @@ used to test the Unity control interface.
 | `/decision_making/trajectory` | `planning/Trajectory` | state machine | control |
 | `/decision_making/state` | `std_msgs/String` | state machine | diagnostics |
 | `/car_command` | `simulation/VehicleControl` | control | simulation |
+
+## Custom ROS interfaces
+
+The project defines its own message and service types instead of representing
+project-specific data as loosely related standard topics. They are registered
+with `rosidl_generate_interfaces` and are compiled into C++ type-support code.
+
+### Custom messages
+
+| Type | Important fields | Purpose and data flow |
+| --- | --- | --- |
+| `simulation/msg/VehicleControl` | `throttle`, `steering`, `brake`, `reserved` | Final normalized vehicle command. The control node publishes it on `/car_command`; the Unity bridge subscribes and transmits it to the simulator. |
+| `perception/msg/TrafficLightState` | `state`, `detected`, `confidence`, `pixel_area` | Structured result from RGB traffic-light recognition, with `UNKNOWN`, `RED`, `YELLOW`, and `GREEN` constants plus diagnostics. |
+| `planning/msg/TrajectoryPoint` | `pose`, `velocity`, `curvature`, `time_from_start` | One time-parameterized sample of the locally planned vehicle motion. |
+| `planning/msg/Trajectory` | `header`, `points[]` | A complete receding-horizon trajectory composed of `TrajectoryPoint` samples; planning publishes it, decision-making gates it, and control tracks it. |
+| `decision_making/msg/HazardStatus` | `distance`, `closing_speed`, `detected`, `lateral_offset`, `avoid_clear` | Our obstacle-analysis message. The hazard monitor publishes it continuously and the decision state machine uses it for slowing, emergency braking, and avoidance. |
+
+The message highlighted for the custom-interface requirement is
+`decision_making/msg/HazardStatus`. It replaces several loosely synchronized
+primitive topics with one timestamped observation. Distance and closing speed
+support collision-risk decisions, while lateral offset and adjacent-corridor
+clearance support choosing a safe avoidance shift.
+
+### Custom service
+
+The project implements `decision_making/srv/SetAutonomyEnabled`:
+
+```text
+# Request
+bool enable
+---
+# Response
+bool success
+bool enabled
+string message
+```
+
+`decision_state_machine_node` serves it at
+`/decision_making/set_autonomy_enabled`. A false request immediately selects
+`AUTONOMY_DISABLED`, zeroes every velocity in the gated trajectory, and causes
+the downstream controller to brake. A true request resumes normal state-machine
+evaluation. The response confirms whether the request succeeded, reports the
+resulting enable state, and provides a human-readable diagnostic. This is a
+service rather than a topic because it is an occasional operator command that
+requires a direct response.
+
+Show and exercise both custom interfaces after building and launching:
+
+```bash
+ros2 interface show decision_making/msg/HazardStatus
+ros2 interface show decision_making/srv/SetAutonomyEnabled
+
+ros2 topic echo /decision_making/hazard_status
+ros2 service call /decision_making/set_autonomy_enabled \
+  decision_making/srv/SetAutonomyEnabled "{enable: false}"
+ros2 service call /decision_making/set_autonomy_enabled \
+  decision_making/srv/SetAutonomyEnabled "{enable: true}"
+```
 
 ## Recommended Reading Order
 
@@ -354,6 +417,11 @@ Drive manually to the destination, press `Ctrl+C`, inspect the generated file,
 and then copy it into the planning configuration directory.
 
 ## Validation Status
+
+The custom `SetAutonomyEnabled` service was verified end to end: disabling
+autonomy returned a successful response and published `AUTONOMY_DISABLED` on
+the state topic; enabling it again returned a successful response and resumed
+normal state evaluation.
 
 The final implementation completed two consecutive full-route simulations:
 

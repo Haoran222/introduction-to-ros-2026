@@ -5,6 +5,10 @@ Vehicle control for the Autonomous Driving project. Covers the handout's
 algorithm that follows the planned trajectory by outputting throttle, brake, and
 steering.
 
+The selected trajectory is tracked using an adaptive Pure Pursuit lateral
+controller and a PI longitudinal speed controller, which publish throttle,
+brake, and steering commands to the simulator.
+
 This is the last stage of the pipeline: `simulation` -> `perception` ->
 `planning` -> `decision_making` -> **`control`** -> back into `simulation` via
 `/car_command`.
@@ -19,7 +23,7 @@ This is the last stage of the pipeline: `simulation` -> `perception` ->
   under-reactive when it matters most). Steering angle follows directly from
   bicycle-model geometry using the known wheelbase (`2.63` m -- handout Fig. 3:
   rear-axle-to-INS `1.35` m + INS-to-front-axle `1.28` m).
-- **Longitudinal control**: PID on `(target speed - current speed)`. Positive
+- **Longitudinal control**: PI control on `(target speed - current speed)`. Positive
   desired acceleration maps to throttle, negative to brake (never both at once).
 
 **Important design point, found by testing against the live simulator**: the
@@ -35,7 +39,7 @@ accelerate from rest.
 `command_timeout`; otherwise the node publishes a hard stop
 (`throttle=0, steering=0, brake=1`) instead of acting on stale simulation data.
 A zero-speed decision is also held with full brake and neutral steering rather
-than being treated as a zero PID error. This is also the state at startup,
+than being treated as a zero PI error. This is also the state at startup,
 before the first complete input set arrives.
 
 Publishes `VehicleControl` on the relative topic `car_command` (matches
@@ -53,7 +57,7 @@ with no additional namespacing).
 | `max_steering_angle` | `0.6` rad | **assumed** -- the simulator's mapping from the normalized `steering` command to a physical front-wheel angle isn't documented; tune against real driving behavior |
 | `lookahead_min` / `lookahead_max` / `lookahead_speed_gain` | `2.0` / `8.0` m / `0.6` | tighter arc-length lookahead to avoid cutting city corners |
 | `speed_preview_min_distance` / `speed_preview_extra_distance` | `1.0` / `5.0` m | ignore the current-speed boundary point and preview farther for curve braking |
-| `speed_kp` / `speed_ki` / `speed_integral_limit` | `0.6` / `0.1` / `2.0` | longitudinal PID |
+| `speed_kp` / `speed_ki` / `speed_integral_limit` | `0.6` / `0.1` / `2.0` | longitudinal PI control |
 | `accel_to_throttle_gain` / `accel_to_brake_gain` | `1.0` / `1.0` | **assumed** -- the simulator's accel-per-normalized-command isn't documented either; tune similarly |
 | `control_rate_hz` | `20.0` | |
 | `command_timeout` | `0.5` s | |
