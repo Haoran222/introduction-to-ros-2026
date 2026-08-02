@@ -1,3 +1,6 @@
+
+
+
 # Introduction to ROS 2026 — Autonomous Driving
 
 This repository contains a ROS 2 Jazzy autonomous-driving system running in a
@@ -8,6 +11,9 @@ avoidance, and stops at the final goal.
 The assignment specification is available in
 [AutonomousDriving.pdf](AutonomousDriving.pdf). The ROS 2 workspace is located
 under [`project/`](project/).
+
+demo:
+https://github.com/user-attachments/assets/77424d0e-0788-4827-baf5-21487605a495
 
 ## Quick Start
 
