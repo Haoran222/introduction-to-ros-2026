@@ -9,17 +9,95 @@ The assignment specification is available in
 [AutonomousDriving.pdf](AutonomousDriving.pdf). The ROS 2 workspace is located
 under [`project/`](project/).
 
-## Quick Start
+## Supported Environment
 
-The following commands assume that the terminal is in the repository root.
-Install Git LFS and download the bundled Unity asset once after cloning:
+The project targets the following platform:
+
+- **Operating system:** Ubuntu 24.04 LTS (Noble), x86_64.
+- **ROS distribution:** ROS 2 Jazzy Jalisco.
+- **Build system:** `colcon` with CMake and C++17.
+- **Display:** an active graphical desktop or WSLg display is required for the
+  bundled Unity player.
+
+The complete stack was developed and validated on Ubuntu 24.04.3 LTS x86_64
+under WSL2/WSLg with ROS 2 Jazzy. The bundled Unity executable is an x86_64
+Linux build; ARM systems are not supported by the supplied simulator binary.
+
+## Installation and Launch
+
+The following procedure starts from a fresh Ubuntu 24.04 installation. Runtime
+requires only one terminal: the final `ros2 launch` command starts Unity and
+every ROS node used by the autonomous-driving system.
+
+### 1. Install ROS 2 and development tools
+
+Configure the official ROS 2 apt repository by following the
+[ROS 2 Jazzy Ubuntu installation guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html),
+then install ROS 2 Jazzy Desktop and the required development tools:
 
 ```bash
+sudo apt update
+sudo apt install -y \
+  git \
+  git-lfs \
+  ros-jazzy-desktop \
+  ros-dev-tools
+```
+
+Initialize `rosdep` once on a new Ubuntu installation:
+
+```bash
+sudo rosdep init
+rosdep update
+```
+
+If `rosdep init` reports that its default sources file already exists, it has
+already been initialized; continue with `rosdep update`.
+
+Confirm that the required tools are available:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+ros2 --help
+colcon --help
+rosdep --version
+```
+
+### 2. Clone the repository and download the Unity asset
+
+```bash
+git clone --branch branch1 --single-branch \
+  https://github.com/Haoran222/introduction-to-ros-2026.git
+cd introduction-to-ros-2026
+
 git lfs install
 git lfs pull
 ```
 
-Build the project with:
+Check that the Unity player and its LFS-managed asset were downloaded:
+
+```bash
+test -x project/src/simulation/unity_sim/Build_Ubuntu/AD_Sim.x86_64
+git lfs ls-files
+```
+
+The first command exits silently when the simulator executable is present and
+executable. Do not build the project if Git LFS reports a failed or incomplete
+download.
+
+### 3. Install workspace dependencies
+
+Run `rosdep` from the repository root. It reads every package's `package.xml`
+and installs ROS/OpenCV/OctoMap/TF dependencies that are not built in this
+workspace:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+rosdep update
+rosdep install --from-paths project/src --ignore-src -r -y --rosdistro jazzy
+```
+
+### 4. Build the autonomous-driving workspace
 
 ```bash
 cd project
@@ -32,22 +110,36 @@ colcon build --symlink-install \
 source install/setup.bash
 ```
 
-Open a new terminal in the repository root and start the complete system:
+A successful build ends with all six selected packages marked `Finished` and
+no package in the `Failed` state.
+
+### 5. Start the complete system from the same terminal
 
 ```bash
-cd project
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-
 ros2 launch autonomous_driving_bringup autonomous_driving.launch.py
 ```
 
-The launch file starts the Unity bridge, perception, planning,
-decision-making, control, and the bundled Linux Unity player. Press `Ctrl+C`
-in the launch terminal to stop the complete system.
+This single launch file starts the Unity TCP/UDP bridge, sensor transforms,
+RGB traffic-light detector, depth/OctoMap processing, planning, decision-making,
+Pure Pursuit/PI control, and the bundled Unity player. No additional terminal
+is required to start individual nodes. A Unity window should appear after the
+configured two-second startup delay. Press `Ctrl+C` once in this terminal to
+shut down the complete system.
 
 Do not run `dummy_controller` together with the autonomous controller. Both
-nodes publish commands to `/car_command`.
+nodes publish commands to `/car_command`; `dummy_controller` is an isolated
+teaching example and is not part of the complete launch file.
+
+### Subsequent runs
+
+After the initial installation and successful build, start the system with:
+
+```bash
+cd introduction-to-ros-2026/project
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+ros2 launch autonomous_driving_bringup autonomous_driving.launch.py
+```
 
 ## System Architecture
 
